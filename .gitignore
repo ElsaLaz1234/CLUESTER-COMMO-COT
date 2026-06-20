@@ -1,0 +1,18 @@
+# Virtual environment
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+src/__pycache__/
+
+# Raw data (large CFTC + price files)
+data/
+
+# Heavy pickle caches
+results/cot_mats_w26.pkl
+results/return_mats_w26.pkl
+
+# OS
+.DS_Store
