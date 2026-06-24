@@ -133,7 +133,7 @@ def build_feature_matrices(
 
     print("Feature matrices not found — recomputing from raw data. "
           "This may take a few minutes.")
-    from clustering import build_cot_feature_matrix, build_return_feature_matrix
+    from src.features import build_cot_feature_matrix, build_return_feature_matrix
 
     cot_mats, return_mats = {}, {}
     total = len(dates)

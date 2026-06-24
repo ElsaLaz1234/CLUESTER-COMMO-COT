@@ -1,69 +1,19 @@
 """
-Download and cache price data (Yahoo Finance) and COT data (CFTC).
+CFTC Disaggregated COT Report — download, parse, and cache.
 """
-import zipfile
 import io
 import warnings
+import zipfile
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import requests
-import yfinance as yf
 
-from config import ALL_TICKERS, TICKERS_SHORT, START_DATE, END_DATE, DATA_DIR
+from config import TICKERS_SHORT, DATA_DIR
 
 Path(DATA_DIR).mkdir(exist_ok=True)
 
-
-# ---------------------------------------------------------------------------
-# Price data
-# ---------------------------------------------------------------------------
-
-def load_prices(refresh: bool = False) -> pd.DataFrame:
-    """Return weekly close prices for all tickers (one column per ticker, short name)."""
-    cache = Path(DATA_DIR) / "prices_weekly.parquet"
-    if cache.exists() and not refresh:
-        return pd.read_parquet(cache)
-
-    frames = {}
-    for ticker in ALL_TICKERS:
-        short = ticker.replace("=F", "")
-        try:
-            t = yf.Ticker(ticker)
-            # Weekly interval is broken for futures in yfinance 1.4 — download daily, resample
-            hist = t.history(start=START_DATE, end=END_DATE, interval="1d", auto_adjust=True, actions=False)
-            if hist.empty:
-                warnings.warn(f"No data for {ticker}")
-                continue
-            hist.index = pd.to_datetime(hist.index).tz_localize(None)
-            weekly = hist["Close"].resample("W-FRI").last().dropna()
-            frames[short] = weekly
-        except Exception as e:
-            warnings.warn(f"Failed to download {ticker}: {e}")
-
-    if not frames:
-        raise RuntimeError("No price data downloaded — check internet connection.")
-
-    prices = pd.DataFrame(frames)
-    prices.index = pd.to_datetime(prices.index).tz_localize(None)
-    prices = prices.sort_index()
-    prices.to_parquet(cache)
-    print(f"  Prices: {prices.shape[1]} tickers, {len(prices)} weeks "
-          f"({prices.index[0].date()} – {prices.index[-1].date()})")
-    return prices
-
-
-def compute_log_returns(prices: pd.DataFrame) -> pd.DataFrame:
-    return np.log(prices / prices.shift(1))
-
-
-# ---------------------------------------------------------------------------
-# COT disaggregated data
-# ---------------------------------------------------------------------------
-
-# CFTC URL patterns — they changed over the years
-# Historical 2006-2016 combined file, then annual files from 2017
 _CFTC_URLS = {
     "hist": "https://www.cftc.gov/files/dea/history/fut_disagg_txt_hist_2006_2016.zip",
     **{yr: f"https://www.cftc.gov/files/dea/history/fut_disagg_txt_{yr}.zip"
@@ -102,25 +52,15 @@ def _download_cot_chunk(key) -> pd.DataFrame:
 
 
 def _parse_cot_date(series: pd.Series) -> pd.Series:
-    """
-    CFTC date columns come in several formats:
-      - "MM/DD/YYYY"  (Report_Date_as_MM_DD_YYYY)
-      - "YYMMDD"      (As_of_Date_in_Form_YYMMDD)  → numeric
-    Try each in order.
-    """
-    # Try standard ISO / MM-DD-YYYY
     parsed = pd.to_datetime(series, errors="coerce")
     if parsed.notna().mean() > 0.5:
         return parsed
-
-    # Try YYMMDD numeric
     try:
         parsed = pd.to_datetime(series.astype(str).str.zfill(6), format="%y%m%d", errors="coerce")
         if parsed.notna().mean() > 0.5:
             return parsed
     except Exception:
         pass
-
     return pd.to_datetime(series, infer_datetime_format=True, errors="coerce")
 
 
@@ -148,11 +88,9 @@ def load_cot(refresh: bool = False) -> pd.DataFrame:
 
     raw = pd.concat(frames, ignore_index=True)
 
-    # --- Find and parse date column ---
-    # Priority: Report_Date_as_MM_DD_YYYY > As_of_Date_in_Form_YYMMDD > any col with 'date'
     date_col_candidates = [
-        "Report_Date_as_YYYY-MM-DD",   # present in all files, trivially parseable
-        "As_of_Date_In_Form_YYMMDD",   # numeric YYMMDD fallback
+        "Report_Date_as_YYYY-MM-DD",
+        "As_of_Date_In_Form_YYMMDD",
         "Report_Date_as_MM_DD_YYYY",
     ] + [c for c in raw.columns if "date" in c.lower() or "as_of" in c.lower()]
 
@@ -170,14 +108,13 @@ def load_cot(refresh: bool = False) -> pd.DataFrame:
     print(f"  COT raw rows after date filter: {len(raw):,}  "
           f"({raw['date'].min().date()} – {raw['date'].max().date()})")
 
-    # --- Column mapping ---
     col_map = {
         "M_Money_Positions_Long_All":    ("MM", "longs"),
         "M_Money_Positions_Short_All":   ("MM", "shorts"),
         "Prod_Merc_Positions_Long_All":  ("PM", "longs"),
         "Prod_Merc_Positions_Short_All": ("PM", "shorts"),
         "Swap_Positions_Long_All":       ("SD", "longs"),
-        "Swap__Positions_Short_All":     ("SD", "shorts"),  # double underscore in CFTC files
+        "Swap__Positions_Short_All":     ("SD", "shorts"),
         "Other_Rept_Positions_Long_All": ("OR", "longs"),
         "Other_Rept_Positions_Short_All":("OR", "shorts"),
     }
@@ -187,13 +124,11 @@ def load_cot(refresh: bool = False) -> pd.DataFrame:
             f"No COT position columns matched. Available: {[c for c in raw.columns if 'Long' in c or 'Short' in c]}"
         )
 
-    # --- Commodity name column ---
     name_col = next(
         (c for c in ("Market_and_Exchange_Names", "Commodity_Name") if c in raw.columns),
         raw.columns[0],
     )
 
-    # Convert position columns to numeric once
     for col in col_map:
         raw[col] = pd.to_numeric(raw[col], errors="coerce")
 
@@ -223,7 +158,7 @@ def load_cot(refresh: bool = False) -> pd.DataFrame:
 
     df = pd.DataFrame(records)
     if df.empty:
-        raise RuntimeError("COT DataFrame is empty after parsing — check commodity keyword matching.")
+        raise RuntimeError("COT DataFrame is empty after parsing.")
 
     df = df.sort_values(["ticker", "category", "date"]).reset_index(drop=True)
     df["delta_net"] = df.groupby(["ticker", "category"])["net"].diff()

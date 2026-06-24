@@ -7,21 +7,14 @@ from pathlib import Path
 import pandas as pd
 
 from config import RESULTS_DIR
-from data_loader import load_prices, load_cot, compute_log_returns
-from clustering import (
-    compute_cot_clusters,
-    compute_return_clusters,
-    build_combined_cot_clusters,
-)
-from metrics import (
-    compute_lead_lag,
-    summarise_lead_lag,
-    lead_lag_by_subperiod,
-    compare_categories,
-    compute_cluster_stability,
-    ari_at_transition_weeks,
-)
-import plots
+from data.data_loader import load_prices, compute_log_returns
+from data.data_cot import load_cot
+from src.clustering import compute_cot_clusters, compute_return_clusters
+from src.cot_category_features import build_combined_cot_clusters
+from src.return_lead_lag import compute_lead_lag, summarise_lead_lag, ari_at_transition_weeks
+from src.subperiod_analysis import lead_lag_by_subperiod, compare_categories
+from src.return_clustering import compute_cluster_stability
+import src.plots as plots
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 

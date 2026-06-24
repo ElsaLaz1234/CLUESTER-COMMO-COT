@@ -35,7 +35,7 @@ def run_pipeline(refresh: bool, make_plots: bool) -> None:
 def run_dendrograms() -> None:
     import pandas as pd
     from pipeline import load_data
-    from dendrograms import (
+    from src.dendrograms import (
         identify_snapshot_weeks,
         build_feature_matrices,
         plot_snapshot_dendrograms,
