@@ -1,4 +1,4 @@
-# COMMO_CLUES_COT — Do COT Positioning Clusters Anticipate Commodity Return Co-movement?
+# Do COT Positioning Clusters Anticipate Commodity Return Co-movement?
 
 A cross-sectional clustering study that tests whether CFTC Commitment of Traders (COT) institutional positioning clusters predict commodity futures return co-movement structure at 1–3 month horizons. The project introduces realized return clustering as the target variable — a structurally different hypothesis from individual return prediction — and applies hierarchical clustering with Ward linkage to both COT positioning and realized returns across 9 commodity futures from 2006 to 2024.
 
